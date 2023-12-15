@@ -10,6 +10,7 @@ import SwiftUI
 struct Home: View {
     var safeArea: EdgeInsets
     @State private var selectedMonth: Date = .currentMonth
+    @State private var selectedDate: Date = .now
     
     var body: some View {
         ScrollView {
@@ -51,69 +52,103 @@ struct Home: View {
     }
     
     @ViewBuilder func CalendarView() -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(currentMonth)
-                .font(.system(size: 35))
-                .frame(maxHeight: .infinity, alignment: .bottom)
-                .overlay(alignment: .topLeading) {
-                    GeometryReader {
-                        let size = $0.size
-                        
-                        Text(year)
-                            .font(.system(size: 25))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(height: calendarTitleViewHeight)
-                .overlay(alignment: .topTrailing) {
-                    HStack(spacing: 15) {
-                        Button {
-                            monthUpdate(false)
-                        } label: {
-                            Image(systemName: "chevron.left")
-                        }
-                        .containerShape(.rect)
-                        
-                        Button {
-                            monthUpdate()
-                        } label: {
-                            Image(systemName: "chevron.right")
-                        }
-                        .containerShape(.rect)
-                    }
-                    .foregroundStyle(.primary)
-                }
+        GeometryReader {
+            let size = $0.size
+            let minY = $0.frame(in: .scrollView(axis: .vertical)).minY
+            //converting scroll into progress
+            let maxHeight = size.height - (calendarTitleViewHeight + weekLabelHeight + topPadding + bottomPadding + safeArea.top)
+            let progress = max(min((-minY/maxHeight), 1), 0)
             
-            VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    ForEach(Calendar.current.weekdaySymbols, id: \.self) {sybmol in
-                        Text(sybmol.prefix(3))
-                            .font(.caption)
-                            .frame(maxWidth: .infinity)
-                            .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(currentMonth)
+                    .font(.system(size: 35 - (10 * progress)))
+                    .offset(y: -50 * progress)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .overlay(alignment: .topLeading) {
+                        GeometryReader {
+                            let size = $0.size
+                            
+                            Text(year)
+                                .font(.system(size: 25 - (10 * progress)))
+                                .offset(x: (size.width + 5) * progress, y: progress * 3)
+                        }
                     }
-                }
-                .frame(height: weekLabelHeight, alignment: .bottom)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(height: calendarTitleViewHeight)
+                    .overlay(alignment: .topTrailing) {
+                        HStack(spacing: 15) {
+                            Button {
+                                monthUpdate(false)
+                            } label: {
+                                Image(systemName: "chevron.left")
+                            }
+                            .containerShape(.rect)
+                            
+                            Button {
+                                monthUpdate()
+                            } label: {
+                                Image(systemName: "chevron.right")
+                            }
+                            .containerShape(.rect)
+                        }
+                        .font(.title3)
+                        .foregroundStyle(.primary)
+                        .offset(x: 150 * progress)
+                    }
                 
-                LazyVGrid(columns: Array(repeating: GridItem(spacing: 0), count: 7), content: {
-                    ForEach(selectedMonthDates) { day in
-                        Text(day.shortSymbol)
-                            .foregroundStyle(day.ignored ? .secondary : .primary)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .contentShape(.rect)
+                VStack(spacing: 0) {
+                    HStack(spacing: 0) {
+                        ForEach(Calendar.current.weekdaySymbols, id: \.self) {sybmol in
+                            Text(sybmol.prefix(3))
+                                .font(.caption)
+                                .frame(maxWidth: .infinity)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .frame(height: weekLabelHeight, alignment: .bottom)
                     
-                })
-                .frame(height: calendaGridHeight)
+                    LazyVGrid(columns: Array(repeating: GridItem(spacing: 0), count: 7), content: {
+                        ForEach(selectedMonthDates) { day in
+                            Text(day.shortSymbol)
+                                .foregroundStyle(day.ignored ? .secondary : .primary)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                                .overlay(alignment: .bottom) {
+                                    Circle()
+                                        .fill(.white)
+                                        .frame(width: 5, height: 5)
+                                        .opacity(Calendar.current.isDate(day.date, inSameDayAs: selectedDate) ? 1 : 0)
+                                        .offset(y: progress * -2)
+                                }
+                                .contentShape(.rect)
+                                .onTapGesture {
+                                    selectedDate = day.date
+                                }
+                        }
+                        
+                    })
+                    .frame(height: calendaGridHeight - ((calendaGridHeight - 50)) * progress, alignment: .top)
+                    .offset(y: (monthProgress * -50) * progress)
+                    .contentShape(.rect)
+                    .clipped()
+                }
+                .offset(y: progress * -50)
             }
+            .foregroundStyle(.white)
+            .padding(.horizontal, horizontalPadding)
+            .padding(.top, topPadding)
+            .padding(.top, safeArea.top)
+            .padding(.bottom, bottomPadding)
+            .frame(maxHeight: .infinity)
+            .frame(height: size.height - (maxHeight * progress), alignment: .top)
+            .background(Color.red.gradient)
+            ///sticking to top
+            .clipped()
+            .contentShape(.rect)
+            .offset(y: -minY)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, horizontalPadding)
-        .padding(.top, topPadding)
-        .padding(.top, safeArea.top)
-        .padding(.bottom, bottomPadding)
-        .background(Color.red.gradient)
+        .frame(height: calendarHeight)
+        .zIndex(1000)
     }
     
     func format(_ format: String) -> String {
@@ -154,8 +189,21 @@ struct Home: View {
         return 5
     }
     
+    var calendarHeight: CGFloat {
+        return calendarTitleViewHeight + weekLabelHeight + safeArea.top + topPadding + bottomPadding + calendaGridHeight
+    }
+    
     var calendaGridHeight: CGFloat {
         return CGFloat(selectedMonthDates.count/7) * 50
+    }
+    
+    var monthProgress: CGFloat {
+        let calendar = Calendar.current
+        if let index = selectedMonthDates.firstIndex(where: {calendar.isDate($0.date, inSameDayAs: selectedDate)}) {
+            return CGFloat(index / 7).rounded()
+        }
+        
+        return 1.0
     }
     
     func monthUpdate(_ increment: Bool = true) {
